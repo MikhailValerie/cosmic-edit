@@ -16,6 +16,17 @@ word-count = Word count
 character-count = Characters
 character-count-no-spaces = Characters (without spaces)
 line-count = Lines
+line-break = Line break
+line-break-cr = Carriage return
+line-break-crlf = Carriage return + line feed
+line-break-lf = Line feed
+line-break-ls = Line separator
+line-break-nel = Next line
+line-break-none = None
+line-break-ps = Paragraph separator
+line-break-unknown = Unknown
+mime-type = MIME Type
+char-set = Character Set
 
 ## Git management
 git-management = Git management

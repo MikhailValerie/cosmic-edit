@@ -26,6 +26,7 @@ use cosmic_files::{
     mime_icon::{mime_for_path, mime_icon},
 };
 use cosmic_text::{Cursor, Edit, Family, Selection, SwashCache, SyntaxSystem, ViMode};
+use mime_guess::Mime;
 use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -347,6 +348,7 @@ pub enum Message {
     Cut,
     DefaultFont(usize),
     DefaultFontSize(usize),
+    DocumentStatistics,
     ZoomIn,
     ZoomOut,
     ZoomReset,
@@ -451,6 +453,17 @@ pub enum Find {
     FindAndReplace,
 }
 
+#[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct DocumentStatistics {
+    pub mime: Option<Mime>,
+    pub charset: Option<Charset>,
+    pub line_break: Option<LineBreak>,
+    pub character_count: usize,
+    pub character_count_no_spaces: usize,
+    pub line_count: usize,
+    pub word_count: usize,
+}
+
 pub struct App {
     core: Core,
     about: About,
@@ -489,6 +502,7 @@ pub struct App {
         HashSet<(PathBuf, RecursiveMode)>,
     )>,
     modifiers: Modifiers,
+    document_statistics: DocumentStatistics,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -966,14 +980,23 @@ impl App {
         }
     }
 
-    fn document_statistics(&self) -> Element<'_, Message> {
-        //TODO: calculate in the background
+
+    fn update_document_statistics(&self) {
+
         let mut character_count = 0;
         let mut character_count_no_spaces = 0;
         let mut line_count = 0;
         let mut word_count = 0;
 
         if let Some(Tab::Editor(tab)) = self.active_tab() {
+            if !self.document_statistics.mime.is_some() {
+                match tab.path_opt.clone() {
+                    Some(path) => {
+                        self.document_statistics.mime = Mime::from_path(path).essence_str().as_string();
+                    }
+                    None => {}
+                }
+            }
             let editor = tab.editor.lock().unwrap();
             editor.with_buffer(|buffer| {
                 line_count = buffer.lines.len();
@@ -997,23 +1020,63 @@ impl App {
             });
         }
 
+        self.document_statistics.character_count = character_count;
+        self.document_statistics.character_count_no_spaces = character_count_no_spaces;
+        self.document_statistics.line_count = line_count;
+        self.document_statistics.line_break = line_break;
+        if !self.document_statistics.charset.is_some() {
+            self.document_statistics.charset = "UTF-8".as_string();
+        }
+
+    }
+
+    fn document_statistics(&self) -> Element<'_, Message> {
+        let doc_stats = self.config_state.document_statistics;
         widget::settings::view_column(vec![
             widget::settings::section()
                 .add(
                     widget::settings::item::builder(fl!("word-count"))
-                        .control(widget::text(word_count.to_string())),
+                        .control(widget::text(doc_stats.word_count.to_string())),
                 )
                 .add(
                     widget::settings::item::builder(fl!("character-count"))
-                        .control(widget::text(character_count.to_string())),
+                        .control(widget::text(doc_stats.character_count.to_string())),
                 )
                 .add(
                     widget::settings::item::builder(fl!("character-count-no-spaces"))
-                        .control(widget::text(character_count_no_spaces.to_string())),
+                        .control(widget::text(doc_stats.character_count_no_spaces.to_string())),
                 )
                 .add(
                     widget::settings::item::builder(fl!("line-count"))
-                        .control(widget::text(line_count.to_string())),
+                        .control(widget::text(doc_stats.line_count.to_string())),
+                )
+                .add(
+                    widget::settings::item::builder(fl!("mime-type"))
+                        .control(widget::text(
+                            if Some(doc.stats.mime) {
+                                doc_stats.mime.to_string()  
+                            } else {
+                                fl!("mime-unknown")
+                            }
+                        )),
+                )
+                .add(
+                    widget::settings::item::builder(fl!("char-set"))
+                        .control(widget::text(doc_stats.charset.to_string())),
+                )
+                .add(
+                    if let Some(line_break) = match {
+                        LineBreak::Cr => "line-break-cr"        // Carriage Return
+                        LineBreak::CrLf => "line-break-crlf"    // Carriage Return + Line Feed
+                        LineBreak::Lf => "line-break-lf"        // Line Feed
+                        LineBreak::Ls => "line-break-ls"        // Line Separator
+                        LineBreak::Nel => "line-break-nel"      // NExt Line
+                        LineBreak::Ps => "line-break-ps"        // Paragraph Separator
+                        LineBreak::None => "line-break-none"    // None
+                        _ => "line-break-unknown"               // Unknown
+                    }
+                    widget::settings::item::builder(fl!("line-break"))
+                        .control(widget::text(fl!(&line_break))),
                 )
                 .into(),
         ])
@@ -1505,6 +1568,7 @@ impl Application for App {
             project_search_has_focus: false,
             watcher_opt: None,
             modifiers: Modifiers::empty(),
+            document_statistics: DocumentStatistics::default()
         };
 
         // Do not show nav bar by default. Will be opened by open_project if needed
@@ -1893,6 +1957,9 @@ impl Application for App {
                     log::warn!("failed to find font with index {}", index);
                 }
             },
+            Message::DocumentStatistics => {
+                self.update_document_statistics();
+            }
             Message::ZoomIn => {
                 return self.update_render_active_tab_zoom(message);
             }

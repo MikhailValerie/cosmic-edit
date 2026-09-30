@@ -403,6 +403,7 @@ pub enum Message {
     SaveAsResult(segmented_button::Entity, DialogResult),
     Scroll(f32),
     SelectAll,
+    SetAppendTxt(bool),
     Surface(surface::Action<Message>),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     SyntaxTheme(usize, bool),

@@ -2597,7 +2597,6 @@ impl Application for App {
             Message::Redo => {
                 if let Some(Tab::Editor(tab)) = self.active_tab() {
                     {
-        nav = nav.padding(12);
                         let mut editor = tab.editor.lock().unwrap();
                         editor.redo();
                     }
